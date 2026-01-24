@@ -4,6 +4,7 @@
  * Google OAuth sign-in page with authorization code flow.
  */
 
+import { useEffect } from 'react';
 import { useGoogleLogin } from '@react-oauth/google';
 import { useNavigate } from 'react-router-dom';
 import { Beaker, Sparkles, BookOpen, FileText } from 'lucide-react';
@@ -14,18 +15,18 @@ export function LoginPage() {
     const navigate = useNavigate();
     const { setUser, isAuthenticated } = useAuthStore();
 
-    // Redirect if already authenticated
-    if (isAuthenticated) {
-        navigate('/');
-        return null;
-    }
+    // Redirect if already authenticated (using useEffect to avoid render-time navigation)
+    useEffect(() => {
+        if (isAuthenticated) {
+            navigate('/');
+        }
+    }, [isAuthenticated, navigate]);
 
     const login = useGoogleLogin({
         flow: 'auth-code',
         onSuccess: async (codeResponse) => {
             try {
                 // Send the authorization code to the backend
-                // Backend will exchange it for tokens using client_secret
                 const response = await authApi.googleAuth(codeResponse.code);
                 setUser(response.data.user);
                 localStorage.setItem('session_token', response.data.session_token);
@@ -38,6 +39,11 @@ export function LoginPage() {
             console.error('Google login error:', error);
         },
     });
+
+    // Don't render login UI if already authenticated
+    if (isAuthenticated) {
+        return null;
+    }
 
     return (
         <div className="min-h-screen flex">

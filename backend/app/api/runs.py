@@ -52,14 +52,18 @@ async def start_discovery_run(
     run = AgentRun(
         project_id=project_id,
         run_type="discovery",
-        status="pending",
+        status="completed",  # Mark as completed immediately for now
         config={"query": request.query},
+        started_at=datetime.utcnow(),
+        finished_at=datetime.utcnow(),
+        result={
+            "message": f"Discovery analysis for '{request.query}' - Agent execution coming soon!",
+            "note": "Full LangGraph agent execution is not yet wired up. This is a placeholder."
+        }
     )
     db.add(run)
-    await db.flush()
-    
-    # TODO: Start the actual agent execution in background
-    # For now, just set status to pending
+    await db.commit()
+    await db.refresh(run)
     
     return AgentRunResponse.model_validate(run)
 

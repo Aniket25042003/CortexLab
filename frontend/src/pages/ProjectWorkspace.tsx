@@ -23,6 +23,7 @@ import {
     artifactsApi,
     type Message,
     type Artifact,
+    type AgentRun,
 } from '../lib/api';
 import { cn, formatRelativeTime, downloadBlob } from '../lib/utils';
 
@@ -45,7 +46,6 @@ export function ProjectWorkspace() {
         queryKey: ['messages', projectId],
         queryFn: () => messagesApi.list(projectId!).then((res) => res.data),
         enabled: !!projectId,
-        refetchInterval: 5000, // Poll for new messages
     });
 
     // Fetch artifacts
@@ -55,13 +55,25 @@ export function ProjectWorkspace() {
         enabled: !!projectId,
     });
 
-    // Fetch runs
+    // Fetch runs with conditional polling (only polls when there's an active run)
     const { data: runsData } = useQuery({
         queryKey: ['runs', projectId],
         queryFn: () => runsApi.list(projectId!).then((res) => res.data),
         enabled: !!projectId,
-        refetchInterval: 3000,
+        staleTime: 10000, // Consider data fresh for 10 seconds
+        refetchInterval: (query) => {
+            // Only poll if there's an active run
+            const hasActiveRun = query.state.data?.runs?.some(
+                (r: AgentRun) => r.status === 'running' || r.status === 'pending'
+            );
+            return hasActiveRun ? 5000 : false;
+        },
     });
+
+    // Get current active run for UI display
+    const currentRun = runsData?.runs?.find(
+        (r: AgentRun) => r.status === 'running' || r.status === 'pending'
+    );
 
     // Send message mutation
     const sendMessageMutation = useMutation({
@@ -77,6 +89,11 @@ export function ProjectWorkspace() {
         mutationFn: (query: string) => runsApi.startDiscovery(projectId!, query),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['runs', projectId] });
+            // Refresh messages after a delay to get any agent response
+            setTimeout(() => {
+                queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
+                queryClient.invalidateQueries({ queryKey: ['artifacts', projectId] });
+            }, 2000);
         },
     });
 
@@ -87,8 +104,10 @@ export function ProjectWorkspace() {
 
     const handleSend = () => {
         if (message.trim()) {
-            sendMessageMutation.mutate(message.trim());
-            startDiscoveryMutation.mutate(message.trim());
+            const query = message.trim();
+            setMessage('');
+            sendMessageMutation.mutate(query);
+            startDiscoveryMutation.mutate(query);
         }
     };
 
@@ -107,8 +126,6 @@ export function ProjectWorkspace() {
             console.error('Export failed:', error);
         }
     };
-
-    const currentRun = runsData?.runs.find((r) => r.status === 'running' || r.status === 'pending');
 
     return (
         <div className="flex h-[calc(100vh-64px)]">
@@ -180,7 +197,7 @@ export function ProjectWorkspace() {
                 {/* Messages */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4">
                     {messages.length === 0 ? (
-                        <WelcomeMessage />
+                        <WelcomeMessage onSuggestionClick={(s) => setMessage(s)} />
                     ) : (
                         messages.map((msg) => (
                             <MessageBubble key={msg.id} message={msg} />
@@ -216,11 +233,11 @@ export function ProjectWorkspace() {
                             value={message}
                             onChange={(e) => setMessage(e.target.value)}
                             onKeyDown={handleKeyDown}
-                            disabled={sendMessageMutation.isPending}
+                            disabled={sendMessageMutation.isPending || startDiscoveryMutation.isPending}
                         />
                         <button
                             onClick={handleSend}
-                            disabled={!message.trim() || sendMessageMutation.isPending}
+                            disabled={!message.trim() || sendMessageMutation.isPending || startDiscoveryMutation.isPending}
                             className="btn btn-primary disabled:opacity-50"
                         >
                             <Send className="w-5 h-5" />
@@ -285,7 +302,7 @@ function MessageBubble({ message }: { message: Message }) {
     );
 }
 
-function WelcomeMessage() {
+function WelcomeMessage({ onSuggestionClick }: { onSuggestionClick: (s: string) => void }) {
     return (
         <div className="text-center py-12 space-y-6">
             <div className="w-16 h-16 mx-auto rounded-2xl gradient-bg flex items-center justify-center">
@@ -307,6 +324,7 @@ function WelcomeMessage() {
                 ].map((suggestion) => (
                     <button
                         key={suggestion}
+                        onClick={() => onSuggestionClick(suggestion)}
                         className="btn btn-secondary text-sm"
                     >
                         {suggestion}
