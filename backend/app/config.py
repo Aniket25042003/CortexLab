@@ -28,6 +28,10 @@ class Settings(BaseSettings):
         default="",
         description="Google OAuth Client ID"
     )
+    google_client_secret: str = Field(
+        default="",
+        description="Google OAuth Client Secret (optional, not used in current flow)"
+    )
     
     # Gemini AI
     google_api_key: str = Field(
@@ -62,6 +66,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"
+        extra = "ignore"  # Ignore any extra env vars not defined here
 
 
 @lru_cache()

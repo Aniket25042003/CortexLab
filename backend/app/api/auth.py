@@ -1,14 +1,13 @@
 """
 Authentication API Routes
 
-Handles Google OAuth authentication and session management.
+Handles Google OAuth authentication using authorization code flow.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Response, Cookie
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from google.oauth2 import id_token
-from google.auth.transport import requests
+import httpx
 from typing import Optional
 
 from app.core.database import get_db
@@ -20,6 +19,10 @@ from app.schemas import GoogleAuthRequest, AuthResponse, UserResponse
 router = APIRouter()
 settings = get_settings()
 
+# Google OAuth token endpoint
+GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
+GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
+
 
 @router.post("/google", response_model=AuthResponse)
 async def google_auth(
@@ -28,27 +31,62 @@ async def google_auth(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Authenticate with Google OAuth.
+    Authenticate with Google OAuth using authorization code flow.
     
-    Verifies the Google ID token and creates/retrieves the user account.
-    Returns a session token stored in an httpOnly cookie.
+    Exchanges the authorization code for access token using client_secret,
+    then fetches user info and creates/retrieves user account.
     """
     try:
-        # Verify the Google ID token
-        idinfo = id_token.verify_oauth2_token(
-            request.id_token,
-            requests.Request(),
-            settings.google_client_id
-        )
+        # Exchange authorization code for access token
+        async with httpx.AsyncClient() as client:
+            token_response = await client.post(
+                GOOGLE_TOKEN_URL,
+                data={
+                    "code": request.id_token,  # This is actually the auth code
+                    "client_id": settings.google_client_id,
+                    "client_secret": settings.google_client_secret,
+                    "redirect_uri": "postmessage",  # Special value for popup flow
+                    "grant_type": "authorization_code",
+                },
+            )
+            
+            if token_response.status_code != 200:
+                raise HTTPException(
+                    status_code=401, 
+                    detail=f"Failed to exchange code: {token_response.text}"
+                )
+            
+            tokens = token_response.json()
+            access_token = tokens.get("access_token")
+            
+            if not access_token:
+                raise HTTPException(status_code=401, detail="No access token received")
+            
+            # Fetch user info using the access token
+            userinfo_response = await client.get(
+                GOOGLE_USERINFO_URL,
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            
+            if userinfo_response.status_code != 200:
+                raise HTTPException(
+                    status_code=401, 
+                    detail="Failed to fetch user info"
+                )
+            
+            userinfo = userinfo_response.json()
         
-        # Extract user info from the token
-        google_id = idinfo["sub"]
-        email = idinfo["email"]
-        name = idinfo.get("name", email.split("@")[0])
-        avatar_url = idinfo.get("picture")
+        # Extract user info
+        google_id = userinfo.get("id")
+        email = userinfo.get("email")
+        name = userinfo.get("name", email.split("@")[0] if email else "User")
+        avatar_url = userinfo.get("picture")
         
-    except ValueError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid Google token: {str(e)}")
+        if not google_id or not email:
+            raise HTTPException(status_code=401, detail="Invalid user info from Google")
+        
+    except httpx.HTTPError as e:
+        raise HTTPException(status_code=401, detail=f"Google auth failed: {str(e)}")
     
     # Check if user exists
     result = await db.execute(
@@ -65,11 +103,13 @@ async def google_auth(
             avatar_url=avatar_url
         )
         db.add(user)
-        await db.flush()
+        await db.commit()
+        await db.refresh(user)
     else:
         # Update user info if changed
         user.name = name
         user.avatar_url = avatar_url
+        await db.commit()
     
     # Create session token
     session_token = create_session_token(user.id)
@@ -79,7 +119,7 @@ async def google_auth(
         key="session_token",
         value=session_token,
         httponly=True,
-        secure=True,  # Set to False for local development without HTTPS
+        secure=False,  # Set to True in production with HTTPS
         samesite="lax",
         max_age=86400 * 7  # 7 days
     )

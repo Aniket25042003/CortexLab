@@ -1,7 +1,7 @@
 /**
  * Login Page
  * 
- * Google OAuth sign-in page with modern design.
+ * Google OAuth sign-in page with authorization code flow.
  */
 
 import { useGoogleLogin } from '@react-oauth/google';
@@ -21,11 +21,12 @@ export function LoginPage() {
     }
 
     const login = useGoogleLogin({
-        onSuccess: async (tokenResponse) => {
+        flow: 'auth-code',
+        onSuccess: async (codeResponse) => {
             try {
-                // Exchange the access token for an ID token via your backend
-                // Note: For proper Google Sign-In, you might need to adjust this flow
-                const response = await authApi.googleAuth(tokenResponse.access_token);
+                // Send the authorization code to the backend
+                // Backend will exchange it for tokens using client_secret
+                const response = await authApi.googleAuth(codeResponse.code);
                 setUser(response.data.user);
                 localStorage.setItem('session_token', response.data.session_token);
                 navigate('/');
