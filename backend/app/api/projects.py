@@ -12,7 +12,7 @@ from typing import List
 from datetime import datetime
 from app.core.database import get_db
 from app.dependencies import get_current_user
-from app.models import User, Project, Artifact, Source, ExperimentUpload, Conversation, AgentRun
+from app.models import User, Project, Artifact, Source, ExperimentUpload, AgentRun
 from app.schemas import (
     ProjectCreate,
     ProjectUpdate,
@@ -44,10 +44,6 @@ async def create_project(
     )
     db.add(project)
     await db.flush()
-    
-    # Create initial conversation
-    conversation = Conversation(project_id=project.id)
-    db.add(conversation)
     
     # Auto-trigger discovery run
     query = project_data.description or project_data.title

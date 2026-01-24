@@ -8,6 +8,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
 from app.config import get_settings
 from app.agents.state import DiscoveryState
+from app.agents.utils import parse_json
 import json
 
 import logging
@@ -84,7 +85,7 @@ async def gap_miner_node(state: DiscoveryState) -> DiscoveryState:
     logger.info(f"[GAP_MINER] Mining gaps from {len(themes)} themes and {len(papers)} papers...")
 
     from app.agents.llm_factory import get_llm
-    llm = get_llm(temperature=0.4)
+    llm = get_llm(model_name="gpt_oss", temperature=0.4)
     
     prompt = ChatPromptTemplate.from_template(GAP_MINER_PROMPT)
     chain = prompt | llm
@@ -98,20 +99,7 @@ async def gap_miner_node(state: DiscoveryState) -> DiscoveryState:
             "under_explored": under_explored,
         })
         
-        # Parse JSON
-        content = response.content
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0]
-        
-        try:
-            result = json.loads(content.strip())
-        except json.JSONDecodeError:
-            # Fallback: maintain raw strings for regex repair
-            import re
-            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', content)
-            result = json.loads(fixed_content.strip())
+        result = parse_json(response.content)
         
         logger.info(f"[GAP_MINER] Identified {len(result.get('gaps', []))} gaps")
         

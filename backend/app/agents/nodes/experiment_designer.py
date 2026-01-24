@@ -9,7 +9,11 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
 from app.config import get_settings
 from app.agents.state import DeepDiveState
+from app.agents.utils import parse_json
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 settings = get_settings()
 
@@ -175,7 +179,7 @@ async def experiment_designer_node(state: DeepDiveState) -> DeepDiveState:
     impl_notes_text = json.dumps(implementation_notes, indent=2) if implementation_notes else "No implementation notes"
     
     from app.agents.llm_factory import get_llm
-    llm = get_llm(temperature=0.4)
+    llm = get_llm(model_name="kimi", temperature=0.4)
     
     prompt = ChatPromptTemplate.from_template(EXPERIMENT_DESIGN_PROMPT)
     chain = prompt | llm
@@ -193,21 +197,7 @@ async def experiment_designer_node(state: DeepDiveState) -> DeepDiveState:
             "implementation_notes": impl_notes_text,
         })
         
-        # Parse JSON response
-        content = response.content
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0]
-        
-        try:
-            result = json.loads(content.strip())
-        except json.JSONDecodeError:
-            # Fallback: maintain raw strings for regex repair
-            # Fix invalid escapes: \ that is not followed by " \ / b f n r t u
-            import re
-            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', content)
-            result = json.loads(fixed_content.strip())
+        result = parse_json(response.content)
         
         return {
             **state,

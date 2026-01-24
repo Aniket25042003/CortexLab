@@ -10,6 +10,7 @@ from langchain.prompts import ChatPromptTemplate
 from app.config import get_settings
 from app.agents.state import DeepDiveState
 from app.agents.tools.google_scholar import search_google_scholar
+from app.agents.utils import parse_json
 import json
 
 settings = get_settings()
@@ -114,7 +115,7 @@ async def deep_dive_scout_node(state: DeepDiveState) -> DeepDiveState:
     novelty_angle = direction.get("novelty_angle", "")
     
     from app.agents.llm_factory import get_llm
-    llm = get_llm(temperature=0.3)
+    llm = get_llm(model_name="gpt_oss", temperature=0.3)
     
     try:
         # Step 1: Generate targeted search queries
@@ -128,17 +129,7 @@ async def deep_dive_scout_node(state: DeepDiveState) -> DeepDiveState:
         
         # Parse search queries
         query_content = query_response.content
-        if "```json" in query_content:
-            query_content = query_content.split("```json")[1].split("```")[0]
-        elif "```" in query_content:
-            query_content = query_content.split("```")[1].split("```")[0]
-        
-        try:
-            search_queries = json.loads(query_content.strip())
-        except json.JSONDecodeError:
-            import re
-            fixed_queries = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', query_content)
-            search_queries = json.loads(fixed_queries.strip())
+        search_queries = parse_json(query_content)
         
         # Step 2: Search for papers with each query
         all_papers = []
@@ -174,20 +165,7 @@ async def deep_dive_scout_node(state: DeepDiveState) -> DeepDiveState:
             "papers_text": papers_text,
         })
         
-        # Parse analysis result
-        content = analysis_response.content
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0]
-        
-        try:
-            result = json.loads(content.strip())
-        except json.JSONDecodeError:
-            # Fallback: maintain raw strings for regex repair
-            import re
-            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', content)
-            result = json.loads(fixed_content.strip())
+        result = parse_json(analysis_response.content)
         
         return {
             **state,

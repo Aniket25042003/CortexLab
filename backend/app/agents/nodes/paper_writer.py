@@ -9,6 +9,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
 from app.config import get_settings
 from app.agents.state import PaperState
+from app.agents.utils import parse_json
 import json
 import re
 
@@ -127,8 +128,8 @@ async def paper_writer_node(state: PaperState) -> PaperState:
     
     from app.agents.llm_factory import get_llm
 
-    llm_flash = get_llm(temperature=0.3)
-    llm_pro = get_llm(temperature=0.4)
+    llm_flash = get_llm(model_name="gpt_oss", temperature=0.3)
+    llm_pro = get_llm(model_name="kimi", temperature=0.4)
     
     try:
         # Step 1: Generate paper outline
@@ -152,19 +153,7 @@ async def paper_writer_node(state: PaperState) -> PaperState:
             "experiment_results": exp_data_text,
         })
         
-        # Parse outline
-        outline_content = outline_response.content
-        if "```json" in outline_content:
-            outline_content = outline_content.split("```json")[1].split("```")[0]
-        elif "```" in outline_content:
-            outline_content = outline_content.split("```")[1].split("```")[0]
-        
-        try:
-            outline = json.loads(outline_content.strip())
-        except json.JSONDecodeError:
-             # Fallback: maintain raw strings for regex repair
-            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', outline_content)
-            outline = json.loads(fixed_content.strip())
+        outline = parse_json(outline_response.content)
         title = outline.get("title", "Research Paper Draft")
         paper_outline = outline.get("outline", {})
         

@@ -14,7 +14,6 @@ from app.core.database import Base
 
 if TYPE_CHECKING:
     from app.models.user import User
-    from app.models.conversation import Conversation
     from app.models.agent_run import AgentRun
     from app.models.artifact import Artifact
     from app.models.source import Source
@@ -55,11 +54,6 @@ class Project(Base):
     
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="projects")
-    conversations: Mapped[list["Conversation"]] = relationship(
-        "Conversation",
-        back_populates="project",
-        cascade="all, delete-orphan"
-    )
     agent_runs: Mapped[list["AgentRun"]] = relationship(
         "AgentRun",
         back_populates="project",

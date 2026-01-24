@@ -9,7 +9,6 @@ import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import ReactMarkdown from 'react-markdown';
 import {
-    Send,
     Sparkles,
     FileText,
     Upload,
@@ -20,11 +19,9 @@ import {
 } from 'lucide-react';
 import {
     projectsApi,
-    messagesApi,
     runsApi,
     artifactsApi,
     experimentsApi,
-    type Message,
     type Artifact,
     type AgentRun,
 } from '../lib/api';
@@ -34,9 +31,7 @@ import { useAuthStore } from '../stores/authStore';
 
 export function ProjectWorkspace() {
     const { projectId } = useParams<{ projectId: string }>();
-    const [message, setMessage] = useState('');
     const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
-    const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const queryClient = useQueryClient();
     const { isAuthenticated } = useAuthStore();
@@ -48,12 +43,6 @@ export function ProjectWorkspace() {
         enabled: !!projectId && isAuthenticated,
     });
 
-    // Fetch messages
-    const { data: messages = [] } = useQuery({
-        queryKey: ['messages', projectId],
-        queryFn: () => messagesApi.list(projectId!).then((res) => res.data),
-        enabled: !!projectId && isAuthenticated,
-    });
 
     // Fetch artifacts
     const { data: artifactsData } = useQuery({
@@ -99,22 +88,13 @@ export function ProjectWorkspace() {
     const isChatEnabled = isDeepDivePhase && latestRun?.status === 'completed';
     const hasActiveRun = !!currentRun;
 
-    // Refresh artifacts and messages when a run completes
+    // Refresh artifacts when a run completes
     useEffect(() => {
         if (!hasActiveRun) {
             queryClient.invalidateQueries({ queryKey: ['artifacts', projectId] });
-            queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
         }
     }, [hasActiveRun, queryClient, projectId]);
 
-    // Send message mutation
-    const sendMessageMutation = useMutation({
-        mutationFn: (content: string) => messagesApi.send(projectId!, content, true),
-        onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
-            setMessage('');
-        },
-    });
 
     // Deep dive mutation
     const deepDiveMutation = useMutation({
@@ -152,24 +132,6 @@ export function ProjectWorkspace() {
         }
     };
 
-    // Scroll to bottom when new messages arrive
-    useEffect(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
-
-    const handleSend = () => {
-        if (message.trim()) {
-            setMessage('');
-            sendMessageMutation.mutate(message.trim());
-        }
-    };
-
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
-        }
-    };
 
     const handleSelectDirection = (direction: any) => {
         deepDiveMutation.mutate(direction);
@@ -346,46 +308,32 @@ export function ProjectWorkspace() {
                         </div>
                     )}
 
-                    {/* Phase 3: Chat Interface (Only when deep dive complete) */}
+                    {/* Phase 3: Research Complete View */}
                     {isChatEnabled && !hasActiveRun && (
-                        <div className="h-full flex flex-col">
-                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                                {messages.length === 0 ? (
-                                    <div className="text-center py-12">
-                                        <Sparkles className="w-12 h-12 text-[var(--color-primary)] mx-auto mb-4" />
-                                        <h3 className="text-lg font-medium">Deep Dive Complete</h3>
-                                        <p className="text-[var(--color-text-secondary)]">
-                                            You can now discuss the research plan or upload experiment results.
-                                        </p>
-                                    </div>
-                                ) : (
-                                    messages.map((msg) => (
-                                        <MessageBubble key={msg.id} message={msg} />
-                                    ))
-                                )}
-                                <div ref={messagesEndRef} />
+                        <div className="h-full flex flex-col items-center justify-center p-12 text-center">
+                            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
+                                <Sparkles className="w-8 h-8 text-green-600" />
                             </div>
-
-                            {/* Input Area */}
-                            <div className="border-t border-[var(--color-border)] p-4">
-                                <div className="flex gap-3">
-                                    <input
-                                        type="text"
-                                        className="input flex-1"
-                                        placeholder="Discuss research or ask for adjustments..."
-                                        value={message}
-                                        onChange={(e) => setMessage(e.target.value)}
-                                        onKeyDown={handleKeyDown}
-                                        disabled={sendMessageMutation.isPending}
-                                    />
+                            <h3 className="text-xl font-semibold mb-2">Research Deep Dive Complete</h3>
+                            <p className="text-[var(--color-text-secondary)] max-w-md mb-6">
+                                The agent has completed the detailed analysis. You can find the experimental plan and other findings in the artifacts sidebar.
+                            </p>
+                            <div className="flex gap-4">
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="btn btn-primary"
+                                >
+                                    <Upload className="w-4 h-4 mr-2" />
+                                    Upload Results
+                                </button>
+                                {artifactsData?.artifacts?.[0] && (
                                     <button
-                                        onClick={handleSend}
-                                        disabled={!message.trim() || sendMessageMutation.isPending}
-                                        className="btn btn-primary disabled:opacity-50"
+                                        onClick={() => setSelectedArtifact(artifactsData.artifacts[0])}
+                                        className="btn btn-secondary"
                                     >
-                                        <Send className="w-5 h-5" />
+                                        View Latest Artifact
                                     </button>
-                                </div>
+                                )}
                             </div>
                         </div>
                     )}
@@ -444,31 +392,5 @@ export function ProjectWorkspace() {
     );
 }
 
-function MessageBubble({ message }: { message: Message }) {
-    const isUser = message.role === 'user';
-
-    return (
-        <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
-            <div
-                className={cn(
-                    "max-w-[80%] rounded-2xl px-4 py-3",
-                    isUser
-                        ? "bg-[var(--color-primary)] text-white rounded-br-sm"
-                        : "bg-[var(--color-bg-tertiary)] text-[var(--color-text-primary)] rounded-bl-sm"
-                )}
-            >
-                {message.role === 'agent' && (
-                    <div className="flex items-center gap-2 mb-2 text-[var(--color-primary)]">
-                        <Sparkles className="w-4 h-4" />
-                        <span className="text-xs font-medium">Research Agent</span>
-                    </div>
-                )}
-                <div className="markdown-content text-sm">
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
-                </div>
-            </div>
-        </div>
-    );
-}
 
 

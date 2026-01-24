@@ -9,6 +9,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
 from app.config import get_settings
 from app.agents.state import PaperState
+from app.agents.utils import parse_json
 import json
 import re
 
@@ -140,7 +141,7 @@ async def paper_editor_node(state: PaperState) -> PaperState:
         }
     
     from app.agents.llm_factory import get_llm
-    llm = get_llm(temperature=0.3)
+    llm = get_llm(model_name="gpt_oss", temperature=0.3)
     
     try:
         # Step 1: Analyze the paper
@@ -152,20 +153,7 @@ async def paper_editor_node(state: PaperState) -> PaperState:
             "revision_instructions": revision_instructions or "General improvement - make the paper clearer and more compelling.",
         })
         
-        # Parse analysis
-        analysis_content = analysis_response.content
-        if "```json" in analysis_content:
-            analysis_content = analysis_content.split("```json")[1].split("```")[0]
-        elif "```" in analysis_content:
-            analysis_content = analysis_content.split("```")[1].split("```")[0]
-        
-        try:
-            analysis = json.loads(analysis_content.strip())
-        except json.JSONDecodeError:
-            # Fallback: maintain raw strings for regex repair
-            # Fix invalid escapes: \ that is not followed by " \ / b f n r t u
-            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', analysis_content)
-            analysis = json.loads(fixed_content.strip())
+        analysis = parse_json(analysis_response.content)
         
         # Step 2: Check for style adaptation request
         style_guides = ["ieee", "acl", "neurips", "icml", "cvpr", "aaai", "emnlp", "naacl", "acm"]

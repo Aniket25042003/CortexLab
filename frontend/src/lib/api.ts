@@ -70,13 +70,6 @@ export interface Project {
     experiment_count?: number;
 }
 
-export interface Message {
-    id: string;
-    role: 'user' | 'assistant' | 'agent' | 'system';
-    content: string;
-    metadata?: Record<string, any>;
-    created_at: string;
-}
 
 export interface AgentRun {
     id: string;
@@ -119,11 +112,6 @@ export const projectsApi = {
     delete: (id: string) => api.delete(`/projects/${id}`),
 };
 
-export const messagesApi = {
-    list: (projectId: string) => api.get<Message[]>(`/projects/${projectId}/messages`),
-    send: (projectId: string, content: string, triggerAgent: boolean = false) =>
-        api.post<Message>(`/projects/${projectId}/messages`, { content, trigger_agent: triggerAgent }),
-};
 
 export const runsApi = {
     list: (projectId: string) => api.get<{ runs: AgentRun[]; total: number }>(`/projects/${projectId}/runs`),

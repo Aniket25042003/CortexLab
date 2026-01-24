@@ -34,7 +34,7 @@ import uvicorn
 from app.config import get_settings
 from app.core.database import init_db
 from app.core.logging_config import setup_logging
-from app.api import auth, projects, conversations, runs, artifacts, experiments, export
+from app.api import auth, projects, runs, artifacts, experiments, export
 
 
 @asynccontextmanager
@@ -81,7 +81,6 @@ def create_app() -> FastAPI:
     # Include API routers
     app.include_router(auth.router, prefix="/api/auth", tags=["Authentication"])
     app.include_router(projects.router, prefix="/api/projects", tags=["Projects"])
-    app.include_router(conversations.router, prefix="/api", tags=["Conversations"])
     app.include_router(runs.router, prefix="/api", tags=["Agent Runs"])
     app.include_router(artifacts.router, prefix="/api", tags=["Artifacts"])
     app.include_router(experiments.router, prefix="/api", tags=["Experiments"])

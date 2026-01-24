@@ -13,12 +13,6 @@ from app.schemas.project import (
     ProjectListResponse,
     ProjectDetailResponse,
 )
-from app.schemas.conversation import (
-    MessageCreate,
-    MessageResponse,
-    ConversationResponse,
-    ConversationListResponse,
-)
 from app.schemas.run import (
     DiscoveryRunRequest,
     DeepDiveRunRequest,
@@ -53,11 +47,6 @@ __all__ = [
     "ProjectResponse",
     "ProjectListResponse",
     "ProjectDetailResponse",
-    # Conversation
-    "MessageCreate",
-    "MessageResponse",
-    "ConversationResponse",
-    "ConversationListResponse",
     # Run
     "DiscoveryRunRequest",
     "DeepDiveRunRequest",

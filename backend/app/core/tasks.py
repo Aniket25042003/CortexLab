@@ -6,6 +6,7 @@ Async background task execution for long-running agent workflows.
 
 import asyncio
 import logging
+import json
 from datetime import datetime
 from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine

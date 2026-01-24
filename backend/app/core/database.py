@@ -34,7 +34,7 @@ async def init_db():
     """Initialize database tables."""
     async with engine.begin() as conn:
         # Import all models to register them with Base.metadata
-        from app.models import user, project, conversation, message, agent_run, run_event, artifact, source, experiment_upload
+        from app.models import user, project, agent_run, run_event, artifact, source, experiment_upload
         await conn.run_sync(Base.metadata.create_all)
 
 

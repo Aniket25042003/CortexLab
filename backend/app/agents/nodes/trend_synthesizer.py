@@ -8,6 +8,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
 from app.config import get_settings
 from app.agents.state import DiscoveryState
+from app.agents.utils import parse_json
 import json
 
 import logging
@@ -78,7 +79,7 @@ async def trend_synthesizer_node(state: DiscoveryState) -> DiscoveryState:
     logger.info(f"[TREND_SYNTHESIZER] Analyzing {len(papers)} papers...")
     
     from app.agents.llm_factory import get_llm
-    llm = get_llm(temperature=0.3)
+    llm = get_llm(model_name="kimi", temperature=0.3)
     
     prompt = ChatPromptTemplate.from_template(TREND_SYNTHESIZER_PROMPT)
     chain = prompt | llm
@@ -86,20 +87,7 @@ async def trend_synthesizer_node(state: DiscoveryState) -> DiscoveryState:
     try:
         response = await chain.ainvoke({"papers_text": papers_text})
         
-        # Parse JSON
-        content = response.content
-        if "```json" in content:
-            content = content.split("```json")[1].split("```")[0]
-        elif "```" in content:
-            content = content.split("```")[1].split("```")[0]
-        
-        try:
-            result = json.loads(content.strip())
-        except json.JSONDecodeError:
-            # Fallback: maintain raw strings for regex repair
-            import re
-            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', content)
-            result = json.loads(fixed_content.strip())
+        result = parse_json(response.content)
         
         logger.info(f"[TREND_SYNTHESIZER] Identified {len(result.get('themes', []))} themes")
         

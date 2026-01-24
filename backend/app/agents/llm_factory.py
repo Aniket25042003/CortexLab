@@ -7,8 +7,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Groq Model Registry
+MODELS = {
+    "kimi": "moonshotai/kimi-k2-instruct-0905",  # 10k TPM
+    "gpt_oss": "openai/gpt-oss-120b",           # 8k TPM
+    "qwen": "qwen/qwen3-32b"                    # 6k TPM
+}
+
 def get_llm(
-    model_name: str = "llama-3.3-70b-versatile",
+    model_name: Optional[str] = None,
     temperature: float = 0.3, 
     fallback_model_name: str = "gemini-1.5-flash",
     google_api_key: Optional[str] = None
@@ -17,7 +24,8 @@ def get_llm(
     Get an LLM instance, prioritizing Groq with Gemini as fallback.
     
     Args:
-        model_name: Primary Groq model name
+        model_name: Key (kimi, gpt_oss, qwen) or full name of the Groq model.
+                   Defaults to k2-instruct if None.
         temperature: Model temperature
         fallback_model_name: Fallback Gemini model name
         
@@ -26,10 +34,15 @@ def get_llm(
     """
     settings = get_settings()
     
+    # Resolve model name
+    effective_model = model_name or MODELS["kimi"]
+    if effective_model in MODELS:
+        effective_model = MODELS[effective_model]
+        
     # Configure Gemini (Backup/Primary if Groq missing)
     gemini_llm = ChatGoogleGenerativeAI(
         model=fallback_model_name,
-        google_api_key=settings.google_api_key,
+        google_api_key=settings.google_api_key or google_api_key,
         temperature=temperature,
         convert_system_message_to_human=True
     )
@@ -37,16 +50,15 @@ def get_llm(
     # Check for Groq
     if settings.groq_api_key:
         try:
-            logger.info(f"Initializing Groq LLM: {model_name}")
+            logger.info(f"Initializing Groq LLM: {effective_model}")
             groq_llm = ChatGroq(
-                model=model_name,
+                model=effective_model,
                 api_key=settings.groq_api_key,
                 temperature=temperature,
                 max_retries=2
             )
             
             # Create fallback chain
-            # When Groq fails (e.g. RateLimit), it switches to Gemini
             return groq_llm.with_fallbacks([gemini_llm])
             
         except Exception as e:
