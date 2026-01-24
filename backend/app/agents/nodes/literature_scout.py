@@ -1,11 +1,11 @@
 """
 Literature Scout Agent Node
 
-Searches academic databases for relevant papers.
+Searches Google Scholar for relevant papers via SerpAPI.
 """
 
 from app.agents.state import DiscoveryState
-from app.agents.tools.semantic_scholar import search_semantic_scholar
+from app.agents.tools.google_scholar import search_google_scholar
 
 
 async def literature_scout_node(state: DiscoveryState) -> DiscoveryState:
@@ -30,7 +30,7 @@ async def literature_scout_node(state: DiscoveryState) -> DiscoveryState:
     try:
         # Search with each query
         for query in search_queries[:5]:  # Limit to first 5 queries
-            papers = await search_semantic_scholar(query, limit=20)
+            papers = await search_google_scholar(query, limit=20)
             
             for paper in papers:
                 if paper["id"] not in seen_ids:

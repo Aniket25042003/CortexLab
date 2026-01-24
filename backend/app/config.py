@@ -42,9 +42,9 @@ class Settings(BaseSettings):
     )
     
     # External APIs
-    semantic_scholar_api_key: str = Field(
+    serpapi_key: str = Field(
         default="",
-        description="Semantic Scholar API key (optional)"
+        description="SerpAPI key for Google Scholar searches"
     )
     
     # File Storage

@@ -9,7 +9,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.prompts import ChatPromptTemplate
 from app.config import get_settings
 from app.agents.state import DeepDiveState
-from app.agents.tools.semantic_scholar import search_semantic_scholar
+from app.agents.tools.google_scholar import search_google_scholar
 import json
 
 settings = get_settings()
@@ -143,7 +143,7 @@ async def deep_dive_scout_node(state: DeepDiveState) -> DeepDiveState:
         seen_ids = set()
         
         for query in search_queries[:5]:
-            papers = await search_semantic_scholar(query, limit=15)
+            papers = await search_google_scholar(query, limit=15)
             for paper in papers:
                 if paper["id"] not in seen_ids:
                     seen_ids.add(paper["id"])
