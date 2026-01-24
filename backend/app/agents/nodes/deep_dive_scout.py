@@ -114,7 +114,7 @@ async def deep_dive_scout_node(state: DeepDiveState) -> DeepDiveState:
     novelty_angle = direction.get("novelty_angle", "")
     
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-flash-lite-latest",
         google_api_key=settings.google_api_key,
         temperature=0.3,
     )

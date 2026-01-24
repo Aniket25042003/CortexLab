@@ -9,9 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
 from typing import List
 
+from datetime import datetime
 from app.core.database import get_db
 from app.dependencies import get_current_user
-from app.models import User, Project, Artifact, Source, ExperimentUpload, Conversation
+from app.models import User, Project, Artifact, Source, ExperimentUpload, Conversation, AgentRun
 from app.schemas import (
     ProjectCreate,
     ProjectUpdate,
@@ -23,25 +24,47 @@ from app.schemas import (
 router = APIRouter()
 
 
+import asyncio
+from app.core.tasks import run_discovery_agent
+
 @router.post("", response_model=ProjectResponse)
 async def create_project(
     project_data: ProjectCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Create a new research project."""
+    """Create a new research project and start discovery agent."""
     project = Project(
-        user_id=current_user.id,
         title=project_data.title,
         description=project_data.description,
-        domain_tags={"tags": project_data.domain_tags} if project_data.domain_tags else None,
+        user_id=current_user.id,
+        status="discovery",
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow(),
     )
     db.add(project)
     await db.flush()
     
-    # Create initial conversation for the project
+    # Create initial conversation
     conversation = Conversation(project_id=project.id)
     db.add(conversation)
+    
+    # Auto-trigger discovery run
+    query = project_data.description or project_data.title
+    
+    run = AgentRun(
+        project_id=project.id,
+        run_type="discovery",
+        status="pending",  # Start as pending
+        config={"query": query},
+        started_at=datetime.utcnow(),
+    )
+    db.add(run)
+    await db.commit()
+    await db.refresh(project)
+    
+    # Trigger background agent execution
+    asyncio.create_task(run_discovery_agent(run.id, project.id, query))
     
     return ProjectResponse.model_validate(project)
 

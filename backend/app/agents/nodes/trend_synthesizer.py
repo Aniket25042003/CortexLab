@@ -10,6 +10,9 @@ from app.config import get_settings
 from app.agents.state import DiscoveryState
 import json
 
+import logging
+
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
@@ -72,8 +75,10 @@ async def trend_synthesizer_node(state: DiscoveryState) -> DiscoveryState:
         for p in papers[:30]  # Limit to 30 papers to fit context
     ])
     
+    logger.info(f"[TREND_SYNTHESIZER] Analyzing {len(papers)} papers...")
+    
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-flash-lite-latest",
         google_api_key=settings.google_api_key,
         temperature=0.3,
     )
@@ -93,6 +98,8 @@ async def trend_synthesizer_node(state: DiscoveryState) -> DiscoveryState:
         
         result = json.loads(content.strip())
         
+        logger.info(f"[TREND_SYNTHESIZER] Identified {len(result.get('themes', []))} themes")
+        
         return {
             **state,
             "themes": result.get("themes", []),
@@ -105,6 +112,7 @@ async def trend_synthesizer_node(state: DiscoveryState) -> DiscoveryState:
             }]
         }
     except Exception as e:
+        logger.error(f"[TREND_SYNTHESIZER] Failed: {e}")
         return {
             **state,
             "error": f"Trend synthesis failed: {str(e)}",

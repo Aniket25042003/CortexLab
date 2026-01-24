@@ -5,12 +5,35 @@ Main entry point for the CortexLab Research Agent API.
 """
 
 from contextlib import asynccontextmanager
+import typing
+
+# Monkeypatch ForwardRef._evaluate to handle the missing recursive_guard argument in Python 3.12+
+# This fixes the compatibility issue between Pydantic V1 (used by LangChain) and Python 3.12
+try:
+    if hasattr(typing.ForwardRef, "_evaluate"):
+        _original_evaluate = typing.ForwardRef._evaluate
+        def _new_evaluate(self, globalns, localns, type_params=None, *, recursive_guard=None):
+            if recursive_guard is None:
+                recursive_guard = frozenset()
+            
+            # Handle Pydantic V1 call where 3rd arg (type_params) is actually the recursive_guard set
+            if isinstance(type_params, set):
+                recursive_guard = type_params
+                type_params = None
+                
+            return _original_evaluate(self, globalns, localns, type_params, recursive_guard=recursive_guard)
+        typing.ForwardRef._evaluate = _new_evaluate
+except Exception as e:
+    print(f"Warning: Failed to patch ForwardRef._evaluate: {e}")
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import os
+import uvicorn
 
 from app.config import get_settings
 from app.core.database import init_db
+from app.core.logging_config import setup_logging
 from app.api import auth, projects, conversations, runs, artifacts, experiments, export
 
 
@@ -42,6 +65,9 @@ def create_app() -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+    
+    # Setup logging
+    setup_logging("INFO")
     
     # Configure CORS
     app.add_middleware(

@@ -15,65 +15,96 @@ import {
     Upload,
     Loader2,
     Download,
+    ShieldAlert,
 } from 'lucide-react';
 import {
     projectsApi,
     messagesApi,
     runsApi,
     artifactsApi,
+    experimentsApi,
     type Message,
     type Artifact,
     type AgentRun,
 } from '../lib/api';
 import { cn, formatRelativeTime, downloadBlob } from '../lib/utils';
+import { OptionsSelector } from '../components/OptionsSelector';
+import { useAuthStore } from '../stores/authStore';
 
 export function ProjectWorkspace() {
     const { projectId } = useParams<{ projectId: string }>();
     const [message, setMessage] = useState('');
     const [selectedArtifact, setSelectedArtifact] = useState<Artifact | null>(null);
     const messagesEndRef = useRef<HTMLDivElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
     const queryClient = useQueryClient();
+    const { isAuthenticated } = useAuthStore();
 
     // Fetch project details
     const { data: project } = useQuery({
         queryKey: ['project', projectId],
         queryFn: () => projectsApi.get(projectId!).then((res) => res.data),
-        enabled: !!projectId,
+        enabled: !!projectId && isAuthenticated,
     });
 
     // Fetch messages
     const { data: messages = [] } = useQuery({
         queryKey: ['messages', projectId],
         queryFn: () => messagesApi.list(projectId!).then((res) => res.data),
-        enabled: !!projectId,
+        enabled: !!projectId && isAuthenticated,
     });
 
     // Fetch artifacts
     const { data: artifactsData } = useQuery({
         queryKey: ['artifacts', projectId],
         queryFn: () => artifactsApi.list(projectId!).then((res) => res.data),
-        enabled: !!projectId,
+        enabled: !!projectId && isAuthenticated,
     });
 
-    // Fetch runs with conditional polling (only polls when there's an active run)
+    // Fetch experiments
+    const { data: experimentsData } = useQuery({
+        queryKey: ['experiments', projectId],
+        queryFn: () => experimentsApi.list(projectId!).then((res) => res.data),
+        enabled: !!projectId && isAuthenticated,
+    });
+
+    // Fetch runs with conditional polling
     const { data: runsData } = useQuery({
         queryKey: ['runs', projectId],
         queryFn: () => runsApi.list(projectId!).then((res) => res.data),
-        enabled: !!projectId,
-        staleTime: 10000, // Consider data fresh for 10 seconds
+        enabled: !!projectId && isAuthenticated,
+        staleTime: 10000,
         refetchInterval: (query) => {
-            // Only poll if there's an active run
             const hasActiveRun = query.state.data?.runs?.some(
                 (r: AgentRun) => r.status === 'running' || r.status === 'pending'
             );
-            return hasActiveRun ? 5000 : false;
+            return hasActiveRun ? 3000 : false;
         },
     });
 
-    // Get current active run for UI display
-    const currentRun = runsData?.runs?.find(
-        (r: AgentRun) => r.status === 'running' || r.status === 'pending'
+    // Sort runs by creation time (descending)
+    const sortedRuns = runsData?.runs.sort((a, b) =>
+        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    ) || [];
+
+    const latestRun = sortedRuns[0];
+    const currentRun = sortedRuns.find(
+        (r) => r.status === 'running' || r.status === 'pending'
     );
+
+    // Determine current phase
+    const isDiscoveryPhase = latestRun?.run_type === 'discovery' && latestRun?.status === 'completed';
+    const isDeepDivePhase = latestRun?.run_type === 'deep_dive';
+    const isChatEnabled = isDeepDivePhase && latestRun?.status === 'completed';
+    const hasActiveRun = !!currentRun;
+
+    // Refresh artifacts and messages when a run completes
+    useEffect(() => {
+        if (!hasActiveRun) {
+            queryClient.invalidateQueries({ queryKey: ['artifacts', projectId] });
+            queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
+        }
+    }, [hasActiveRun, queryClient, projectId]);
 
     // Send message mutation
     const sendMessageMutation = useMutation({
@@ -84,18 +115,41 @@ export function ProjectWorkspace() {
         },
     });
 
-    // Start discovery mutation
-    const startDiscoveryMutation = useMutation({
-        mutationFn: (query: string) => runsApi.startDiscovery(projectId!, query),
+    // Deep dive mutation
+    const deepDiveMutation = useMutation({
+        mutationFn: (direction: any) =>
+            runsApi.startDeepDive(projectId!, direction.id, direction.description),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['runs', projectId] });
-            // Refresh messages after a delay to get any agent response
-            setTimeout(() => {
-                queryClient.invalidateQueries({ queryKey: ['messages', projectId] });
-                queryClient.invalidateQueries({ queryKey: ['artifacts', projectId] });
-            }, 2000);
         },
     });
+
+    // Upload mutation
+    const uploadMutation = useMutation({
+        mutationFn: (file: File) => experimentsApi.upload(projectId!, file),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['experiments', projectId] });
+        },
+    });
+
+    // Draft paper mutation
+    const draftPaperMutation = useMutation({
+        mutationFn: () => {
+            // Include all uploaded experiments
+            const experimentIds = experimentsData?.experiments.map(e => e.id) || [];
+            return runsApi.startPaper(projectId!, experimentIds);
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['runs', projectId] });
+        },
+    });
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            uploadMutation.mutate(file);
+        }
+    };
 
     // Scroll to bottom when new messages arrive
     useEffect(() => {
@@ -104,10 +158,8 @@ export function ProjectWorkspace() {
 
     const handleSend = () => {
         if (message.trim()) {
-            const query = message.trim();
             setMessage('');
-            sendMessageMutation.mutate(query);
-            startDiscoveryMutation.mutate(query);
+            sendMessageMutation.mutate(message.trim());
         }
     };
 
@@ -116,6 +168,10 @@ export function ProjectWorkspace() {
             e.preventDefault();
             handleSend();
         }
+    };
+
+    const handleSelectDirection = (direction: any) => {
+        deepDiveMutation.mutate(direction);
     };
 
     const handleExportDocx = async (artifactId: string, title: string) => {
@@ -130,7 +186,7 @@ export function ProjectWorkspace() {
     return (
         <div className="flex h-[calc(100vh-64px)]">
             {/* Left Sidebar - Artifacts & Sources */}
-            <div className="w-72 border-r border-[var(--color-border)] p-4 overflow-y-auto">
+            <div className="w-72 border-r border-[var(--color-border)] p-4 overflow-y-auto hidden md:block">
                 <div className="space-y-6">
                     {/* Artifacts Section */}
                     <div>
@@ -139,7 +195,7 @@ export function ProjectWorkspace() {
                         </h3>
                         {artifactsData?.artifacts.length === 0 ? (
                             <p className="text-sm text-[var(--color-text-muted)]">
-                                No artifacts yet. Start a research query to generate reports.
+                                No artifacts yet.
                             </p>
                         ) : (
                             <div className="space-y-2">
@@ -169,80 +225,159 @@ export function ProjectWorkspace() {
                         )}
                     </div>
 
-                    {/* Upload Section */}
-                    <div>
-                        <h3 className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-3">
-                            Experiments
-                        </h3>
-                        <button className="w-full btn btn-secondary text-sm">
-                            <Upload className="w-4 h-4" />
-                            Upload Results
-                        </button>
-                    </div>
+                    {/* Upload & Experiment Section (Visible only in Chat/Deep Dive Phase) */}
+                    {isDeepDivePhase && (
+                        <div>
+                            <h3 className="text-sm font-semibold text-[var(--color-text-secondary)] uppercase tracking-wide mb-3 flex justify-between items-center">
+                                <span>Experiments</span>
+                                {uploadMutation.isPending && <Loader2 className="w-3 h-3 animate-spin" />}
+                            </h3>
+
+                            {/* Experiment List */}
+                            <div className="space-y-2 mb-3">
+                                {experimentsData?.experiments.map((exp: any) => (
+                                    <div key={exp.id} className="text-xs p-2 rounded bg-[var(--color-bg-tertiary)] flex items-center justify-between group">
+                                        <span className="truncate flex-1" title={exp.original_name}>{exp.original_name}</span>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="space-y-2">
+                                <input
+                                    type="file"
+                                    ref={fileInputRef}
+                                    className="hidden"
+                                    onChange={handleFileChange}
+                                />
+                                <button
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-full btn btn-secondary text-sm"
+                                    disabled={uploadMutation.isPending || draftPaperMutation.isPending}
+                                >
+                                    <Upload className="w-4 h-4" />
+                                    {uploadMutation.isPending ? 'Uploading...' : 'Upload Results'}
+                                </button>
+
+                                {experimentsData?.experiments && experimentsData.experiments.length > 0 && (
+                                    <button
+                                        onClick={() => draftPaperMutation.mutate()}
+                                        className="w-full btn btn-primary text-sm"
+                                        disabled={draftPaperMutation.isPending || hasActiveRun}
+                                    >
+                                        <Sparkles className="w-4 h-4" />
+                                        {draftPaperMutation.isPending ? 'Drafting...' : 'Draft Paper'}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
                 </div>
             </div>
 
-            {/* Main Chat Area */}
+            {/* Main Area */}
             <div className="flex-1 flex flex-col">
                 {/* Project Header */}
                 <div className="border-b border-[var(--color-border)] p-4">
                     <h2 className="text-xl font-semibold">{project?.title || 'Loading...'}</h2>
                     {project?.description && (
-                        <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+                        <p className="text-sm text-[var(--color-text-secondary)] mt-1 line-clamp-1">
                             {project.description}
                         </p>
                     )}
                 </div>
 
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                    {messages.length === 0 ? (
-                        <WelcomeMessage onSuggestionClick={(s) => setMessage(s)} />
-                    ) : (
-                        messages.map((msg) => (
-                            <MessageBubble key={msg.id} message={msg} />
-                        ))
+                {/* Main Content Area */}
+                <div className="flex-1 overflow-hidden relative">
+                    {/* Phase 1: Options Selection */}
+                    {isDiscoveryPhase && !hasActiveRun && (
+                        <div className="h-full overflow-y-auto">
+                            <OptionsSelector
+                                run={latestRun}
+                                onSelect={handleSelectDirection}
+                                isLoading={deepDiveMutation.isPending}
+                            />
+                        </div>
                     )}
-                    <div ref={messagesEndRef} />
-                </div>
 
-                {/* Agent Status */}
-                {currentRun && (
-                    <div className="border-t border-[var(--color-border)] p-3 bg-[var(--color-bg-secondary)]">
-                        <div className="flex items-center gap-3">
-                            <Loader2 className="w-5 h-5 text-[var(--color-primary)] animate-spin" />
-                            <div>
-                                <p className="text-sm font-medium">
-                                    Agent is working on {currentRun.run_type.replace('_', ' ')}...
-                                </p>
-                                <p className="text-xs text-[var(--color-text-muted)]">
-                                    This may take a few minutes
-                                </p>
+                    {/* Phase 2: Active Run Loading State */}
+                    {hasActiveRun && (
+                        <div className="h-full flex flex-col items-center justify-center p-12 text-center">
+                            <div className="w-16 h-16 bg-[var(--color-primary)]/10 rounded-full flex items-center justify-center mb-4 animate-pulse">
+                                <Loader2 className="w-8 h-8 text-[var(--color-primary)] animate-spin" />
+                            </div>
+                            <h3 className="text-xl font-semibold mb-2">
+                                {currentRun?.run_type === 'discovery' ? 'Analyzing Research Landscape...' :
+                                    currentRun?.run_type === 'deep_dive' ? 'Conducting Deep Dive...' :
+                                        'Agent Working...'}
+                            </h3>
+                            <p className="text-[var(--color-text-secondary)] max-w-md">
+                                {currentRun?.run_type === 'discovery'
+                                    ? 'Scanning sources to identify trends and gaps.'
+                                    : 'Analyzing baselines, datasets, and experiment protocols.'}
+                            </p>
+                        </div>
+                    )}
+
+                    {/* Error State */}
+                    {latestRun?.status === 'failed' && (
+                        <div className="h-full flex flex-col items-center justify-center p-12 text-center text-red-500">
+                            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                                <ShieldAlert className="w-8 h-8 text-red-600" />
+                            </div>
+                            <h3 className="text-xl font-semibold mb-2">Analysis Failed</h3>
+                            <p className="max-w-md mb-4">{latestRun.error_message || "An unexpected error occurred."}</p>
+                            <button
+                                onClick={() => queryClient.invalidateQueries({ queryKey: ['runs', projectId] })}
+                                className="btn btn-secondary"
+                            >
+                                Retry
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Phase 3: Chat Interface (Only when deep dive complete) */}
+                    {isChatEnabled && !hasActiveRun && (
+                        <div className="h-full flex flex-col">
+                            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                                {messages.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <Sparkles className="w-12 h-12 text-[var(--color-primary)] mx-auto mb-4" />
+                                        <h3 className="text-lg font-medium">Deep Dive Complete</h3>
+                                        <p className="text-[var(--color-text-secondary)]">
+                                            You can now discuss the research plan or upload experiment results.
+                                        </p>
+                                    </div>
+                                ) : (
+                                    messages.map((msg) => (
+                                        <MessageBubble key={msg.id} message={msg} />
+                                    ))
+                                )}
+                                <div ref={messagesEndRef} />
+                            </div>
+
+                            {/* Input Area */}
+                            <div className="border-t border-[var(--color-border)] p-4">
+                                <div className="flex gap-3">
+                                    <input
+                                        type="text"
+                                        className="input flex-1"
+                                        placeholder="Discuss research or ask for adjustments..."
+                                        value={message}
+                                        onChange={(e) => setMessage(e.target.value)}
+                                        onKeyDown={handleKeyDown}
+                                        disabled={sendMessageMutation.isPending}
+                                    />
+                                    <button
+                                        onClick={handleSend}
+                                        disabled={!message.trim() || sendMessageMutation.isPending}
+                                        className="btn btn-primary disabled:opacity-50"
+                                    >
+                                        <Send className="w-5 h-5" />
+                                    </button>
+                                </div>
                             </div>
                         </div>
-                    </div>
-                )}
-
-                {/* Input Area */}
-                <div className="border-t border-[var(--color-border)] p-4">
-                    <div className="flex gap-3">
-                        <input
-                            type="text"
-                            className="input flex-1"
-                            placeholder="Describe your research area... (e.g., Computer Vision classifiers for medical imaging)"
-                            value={message}
-                            onChange={(e) => setMessage(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            disabled={sendMessageMutation.isPending || startDiscoveryMutation.isPending}
-                        />
-                        <button
-                            onClick={handleSend}
-                            disabled={!message.trim() || sendMessageMutation.isPending || startDiscoveryMutation.isPending}
-                            className="btn btn-primary disabled:opacity-50"
-                        >
-                            <Send className="w-5 h-5" />
-                        </button>
-                    </div>
+                    )}
                 </div>
             </div>
 
@@ -269,6 +404,29 @@ export function ProjectWorkspace() {
                             <ReactMarkdown>{selectedArtifact.content_markdown}</ReactMarkdown>
                         </div>
                     </div>
+
+                    {/* Action Footer for Experiment Plans */}
+                    {selectedArtifact.artifact_type === 'experiment_plan' && (
+                        <div className="p-4 border-t border-[var(--color-border)] bg-[var(--color-bg-tertiary)]/50">
+                            <div className="flex items-start gap-3">
+                                <Sparkles className="w-5 h-5 text-[var(--color-primary)] mt-0.5" />
+                                <div>
+                                    <h4 className="text-sm font-medium mb-1">Ready to Draft Paper?</h4>
+                                    <p className="text-xs text-[var(--color-text-secondary)] mb-3">
+                                        Upload your experiment results (logs, metrics, or notes) to generate the paper draft.
+                                    </p>
+                                    <button
+                                        onClick={() => fileInputRef.current?.click()}
+                                        className="w-full btn btn-primary text-sm"
+                                        disabled={uploadMutation.isPending}
+                                    >
+                                        <Upload className="w-4 h-4 mr-2" />
+                                        {uploadMutation.isPending ? 'Uploading...' : 'Upload Results'}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
@@ -302,35 +460,4 @@ function MessageBubble({ message }: { message: Message }) {
     );
 }
 
-function WelcomeMessage({ onSuggestionClick }: { onSuggestionClick: (s: string) => void }) {
-    return (
-        <div className="text-center py-12 space-y-6">
-            <div className="w-16 h-16 mx-auto rounded-2xl gradient-bg flex items-center justify-center">
-                <Sparkles className="w-8 h-8 text-white" />
-            </div>
-            <div>
-                <h3 className="text-xl font-semibold mb-2">Ready to explore?</h3>
-                <p className="text-[var(--color-text-secondary)] max-w-md mx-auto">
-                    Tell me about your research area and I'll help you discover gaps,
-                    plan experiments, and draft your paper.
-                </p>
-            </div>
-            <div className="flex flex-wrap justify-center gap-2">
-                {[
-                    'Computer Vision classifiers',
-                    'NLP for healthcare',
-                    'Reinforcement learning',
-                    'Graph neural networks',
-                ].map((suggestion) => (
-                    <button
-                        key={suggestion}
-                        onClick={() => onSuggestionClick(suggestion)}
-                        className="btn btn-secondary text-sm"
-                    >
-                        {suggestion}
-                    </button>
-                ))}
-            </div>
-        </div>
-    );
-}
+

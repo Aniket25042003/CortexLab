@@ -13,7 +13,14 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 1000 * 60 * 5, // 5 minutes
-      retry: 1,
+      gcTime: 1000 * 60 * 30, // 30 minutes
+      retry: (failureCount, error: any) => {
+        // Don't retry on 401 errors
+        if (error?.response?.status === 401) return false;
+        return failureCount < 1;
+      },
+      refetchOnWindowFocus: false, // Stop refetching when window gains focus
+      refetchOnMount: false, // Don't refetch on mount if data is fresh
     },
   },
 });
@@ -22,15 +29,16 @@ const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 // Auth initialization hook
 function useAuthInit() {
-  const { setUser, setLoading } = useAuthStore();
+  const { setUser, setLoading, logout } = useAuthStore();
 
   useEffect(() => {
     const initAuth = async () => {
       const token = localStorage.getItem('session_token');
 
       if (!token) {
-        // No token, not authenticated
-        setLoading(false);
+        // No token, not authenticated - also clear any stale persisted state
+        localStorage.removeItem('cortexlab-auth');
+        logout();
         return;
       }
 
@@ -39,14 +47,15 @@ function useAuthInit() {
         const response = await authApi.getMe();
         setUser(response.data);
       } catch {
-        // Token invalid or expired
+        // Token invalid or expired - clear everything
         localStorage.removeItem('session_token');
-        setUser(null);
+        localStorage.removeItem('cortexlab-auth');
+        logout();
       }
     };
 
     initAuth();
-  }, [setUser, setLoading]);
+  }, [setUser, setLoading, logout]);
 }
 
 // Protected route wrapper

@@ -17,12 +17,18 @@ async def literature_scout_node(state: DiscoveryState) -> DiscoveryState:
     """
     search_queries = state.get("search_queries", [])
     
+    import logging
+    logger = logging.getLogger(__name__)
+    
     if not search_queries:
+        logger.warning("[LITERATURE_SCOUT] No search queries provided")
         return {
             **state,
             "error": "No search queries available",
             "current_step": "error",
         }
+    
+    logger.info(f"[LITERATURE_SCOUT] Searching for {len(search_queries)} queries: {search_queries[:3]}...")
     
     all_papers = []
     seen_ids = set()

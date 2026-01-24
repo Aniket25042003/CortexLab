@@ -10,6 +10,9 @@ from app.config import get_settings
 from app.agents.state import DiscoveryState
 import json
 
+import logging
+
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
@@ -78,8 +81,10 @@ async def gap_miner_node(state: DiscoveryState) -> DiscoveryState:
     well_explored = ", ".join(saturation.get("well_explored", ["None identified"]))
     under_explored = ", ".join(saturation.get("under_explored", ["None identified"]))
     
+    logger.info(f"[GAP_MINER] Mining gaps from {len(themes)} themes and {len(papers)} papers...")
+
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-flash-lite-latest",
         google_api_key=settings.google_api_key,
         temperature=0.4,
     )
@@ -105,6 +110,8 @@ async def gap_miner_node(state: DiscoveryState) -> DiscoveryState:
         
         result = json.loads(content.strip())
         
+        logger.info(f"[GAP_MINER] Identified {len(result.get('gaps', []))} gaps")
+        
         return {
             **state,
             "gaps": result.get("gaps", []),
@@ -116,6 +123,7 @@ async def gap_miner_node(state: DiscoveryState) -> DiscoveryState:
             }]
         }
     except Exception as e:
+        logger.error(f"[GAP_MINER] Failed: {e}")
         return {
             **state,
             "error": f"Gap mining failed: {str(e)}",  

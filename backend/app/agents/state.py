@@ -84,15 +84,21 @@ class DeepDiveState(TypedDict):
     # Deep Dive Scout output
     baseline_methods: Optional[List[dict]]
     datasets: Optional[List[dict]]
-    metrics: Optional[List[str]]
-    failure_cases: Optional[List[str]]
+    metrics: Optional[List[dict]]  # Changed to List[dict] to match reality
+    failure_cases: Optional[List[dict]] # Changed to List[dict] to match reality
+    deep_dive_papers: Optional[List[dict]]
+    implementation_notes: Optional[dict]
     
     # Experiment Designer output
-    hypotheses: Optional[List[str]]
+    hypotheses: Optional[List[dict]]
     ablations: Optional[List[dict]]
     training_protocol: Optional[dict]
     evaluation_plan: Optional[dict]
     compute_estimate: Optional[dict]
+    proposed_method: Optional[dict]
+    experiment_setup: Optional[dict]
+    timeline: Optional[dict]
+    risks: Optional[List[dict]]
     
     # Metadata
     current_step: str

@@ -125,13 +125,13 @@ async def paper_writer_node(state: PaperState) -> PaperState:
     experiment_data = state.get("experiment_data", [])
     
     llm_flash = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-flash-lite-latest",
         google_api_key=settings.google_api_key,
         temperature=0.3,
     )
     
     llm_pro = ChatGoogleGenerativeAI(
-        model="gemini-1.5-pro",
+        model="gemini-flash-lite-latest",
         google_api_key=settings.google_api_key,
         temperature=0.4,
     )

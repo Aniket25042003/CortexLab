@@ -10,12 +10,18 @@ from app.config import get_settings
 from app.agents.state import DiscoveryState
 import json
 
+import logging
+
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
 DIRECTION_GENERATOR_PROMPT = """You are a research direction generator. Convert identified research gaps into concrete, actionable research directions.
 
 Research Domain: {domain}
+
+Identified Themes:
+{themes_text}
 
 Identified Gaps:
 {gaps_text}
@@ -60,19 +66,28 @@ async def direction_generator_node(state: DiscoveryState) -> DiscoveryState:
     Output: directions list
     """
     gaps = state.get("gaps", [])
+    themes = state.get("themes", [])
     domain = state.get("domain_boundaries", {})
     
+    # Fallback to themes if no gaps found
+    use_fallback = False
     if not gaps:
-        return {
-            **state,
-            "error": "No gaps to generate directions from",
-            "current_step": "error",
-        }
+        if not themes:
+            return {
+                **state,
+                "error": "No gaps or themes to generate directions from",
+                "current_step": "error",
+            }
+        use_fallback = True
+        logger.warning("[DIRECTION_GENERATOR] No gaps found, falling back to theme-based generation")
     
-    gaps_text = json.dumps(gaps, indent=2)
+    gaps_text = json.dumps(gaps, indent=2) if gaps else "No specific gaps identified."
+    themes_text = json.dumps(themes, indent=2) if themes else "No specific themes identified."
     
+    logger.info(f"[DIRECTION_GENERATOR] Generating directions from {len(gaps)} gaps...")
+
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-flash-lite-latest",
         google_api_key=settings.google_api_key,
         temperature=0.5,
     )
@@ -84,6 +99,7 @@ async def direction_generator_node(state: DiscoveryState) -> DiscoveryState:
         response = await chain.ainvoke({
             "domain": json.dumps(domain),
             "gaps_text": gaps_text,
+            "themes_text": themes_text,
         })
         
         # Parse JSON
@@ -99,6 +115,8 @@ async def direction_generator_node(state: DiscoveryState) -> DiscoveryState:
         directions = result.get("directions", [])
         directions.sort(key=lambda x: x.get("feasibility_score", 0), reverse=True)
         
+        logger.info(f"[DIRECTION_GENERATOR] Generated {len(directions)} directions")
+        
         return {
             **state,
             "directions": directions,
@@ -110,6 +128,7 @@ async def direction_generator_node(state: DiscoveryState) -> DiscoveryState:
             }]
         }
     except Exception as e:
+        logger.error(f"[DIRECTION_GENERATOR] Failed: {e}")
         return {
             **state,
             "error": f"Direction generation failed: {str(e)}",

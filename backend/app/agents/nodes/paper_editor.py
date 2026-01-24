@@ -137,7 +137,7 @@ async def paper_editor_node(state: PaperState) -> PaperState:
         }
     
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-pro",
+        model="gemini-flash-lite-latest",
         google_api_key=settings.google_api_key,
         temperature=0.3,
     )

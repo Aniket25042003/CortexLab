@@ -175,7 +175,7 @@ async def experiment_designer_node(state: DeepDiveState) -> DeepDiveState:
     impl_notes_text = json.dumps(implementation_notes, indent=2) if implementation_notes else "No implementation notes"
     
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-pro",  # Using Pro for complex reasoning
+        model="gemini-flash-lite-latest",  # Using Pro for complex reasoning
         google_api_key=settings.google_api_key,
         temperature=0.4,
     )

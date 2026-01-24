@@ -25,15 +25,25 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
+// Flag to prevent multiple redirects
+let isRedirecting = false;
+
 // Response interceptor for handling errors
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
-            // Clear local storage and redirect to login
+        if (error.response?.status === 401 && !isRedirecting) {
+            isRedirecting = true;
+
+            // Clear all auth-related storage
             localStorage.removeItem('session_token');
             localStorage.removeItem('user');
-            window.location.href = '/login';
+            localStorage.removeItem('cortexlab-auth'); // Clear zustand persisted state
+
+            // Use a small delay to ensure storage is cleared before redirect
+            setTimeout(() => {
+                window.location.href = '/login';
+            }, 100);
         }
         return Promise.reject(error);
     }
@@ -145,10 +155,14 @@ export const experimentsApi = {
     upload: (projectId: string, file: File, description?: string) => {
         const formData = new FormData();
         formData.append('file', file);
-        if (description) formData.append('description', description);
+        if (description) {
+            formData.append('description', description);
+        }
         return api.post(`/projects/${projectId}/experiments/upload`, formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
+            headers: {
+                'Content-Type': 'multipart/form-data',
+            },
         });
     },
-    delete: (experimentId: string) => api.delete(`/experiments/${experimentId}`),
+    delete: (id: string, projectId: string) => api.delete(`/projects/${projectId}/experiments/${id}`),
 };

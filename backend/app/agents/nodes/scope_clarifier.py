@@ -52,9 +52,14 @@ async def scope_clarifier_node(state: DiscoveryState) -> DiscoveryState:
     Output: domain_boundaries, search_queries, constraints
     """
     import json
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"[SCOPE_CLARIFIER] Processing query: {state['user_query']}")
     
     llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash",
+        model="gemini-flash-lite-latest",
         google_api_key=settings.google_api_key,
         temperature=0.3,
     )

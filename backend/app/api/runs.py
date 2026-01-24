@@ -68,6 +68,9 @@ async def start_discovery_run(
     return AgentRunResponse.model_validate(run)
 
 
+import asyncio
+from app.core.tasks import run_deep_dive_agent, run_paper_agent
+
 @router.post("/projects/{project_id}/runs/deep-dive", response_model=AgentRunResponse)
 async def start_deep_dive_run(
     project_id: str,
@@ -98,12 +101,24 @@ async def start_deep_dive_run(
             "direction_id": request.direction_id,
             "direction_summary": request.direction_summary,
         },
+        started_at=datetime.utcnow(),
     )
     db.add(run)
-    await db.flush()
     
     # Update project status
     project.status = "deep_dive"
+    
+    await db.commit()
+    await db.refresh(run)
+
+    # Trigger background execution
+    # Construct a direction object from request (the agent will fetch details if needed)
+    direction = {
+        "id": request.direction_id,
+        "title": request.direction_summary,
+        "description": request.direction_summary,
+    }
+    asyncio.create_task(run_deep_dive_agent(run.id, project.id, direction))
     
     return AgentRunResponse.model_validate(run)
 
@@ -128,21 +143,28 @@ async def start_paper_run(
     project = project_result.scalar_one_or_none()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
-    
+        
     # Create agent run
     run = AgentRun(
         project_id=project_id,
         run_type="paper",
         status="pending",
         config={"experiment_ids": request.include_experiments},
+        started_at=datetime.utcnow(),
     )
     db.add(run)
-    await db.flush()
     
     # Update project status
     project.status = "paper_drafting"
     
+    await db.commit()
+    await db.refresh(run)
+    
+    # Trigger background execution
+    asyncio.create_task(run_paper_agent(run.id, project.id, {}, []))  # TODO: Pass actual direction and experiment data
+    
     return AgentRunResponse.model_validate(run)
+
 
 
 @router.get("/runs/{run_id}", response_model=AgentRunDetailResponse)
