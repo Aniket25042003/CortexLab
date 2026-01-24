@@ -172,7 +172,6 @@ async def run_deep_dive_agent(run_id: str, project_id: str, direction: dict) -> 
             "project_id": project_id,
             "direction": direction,
             "baseline_methods": None,
-            "datasets": None,
             "metrics": None,
             "failure_cases": None,
             "hypotheses": None,
@@ -302,6 +301,7 @@ async def run_paper_agent(run_id: str, project_id: str, direction: dict, experim
     from app.agents import create_paper_graph
 
     logger.info(f"[PAPER] Starting paper generation for run {run_id}")
+    logger.info(f"[PAPER] Processing {len(experiment_data)} uploaded files: {experiment_data}")
     
     db = await get_async_session()
     
@@ -318,11 +318,76 @@ async def run_paper_agent(run_id: str, project_id: str, direction: dict, experim
         # Create and execute the paper graph
         graph = create_paper_graph()
         
+        # Fetch context from previous runs
+        deep_dive_report = ""
+        loaded_experiment_data = []
+        try:
+            # Get deep dive run result
+            deep_dive_run_result = await db.execute(
+                select(AgentRun)
+                .where(
+                    AgentRun.project_id == project_id,
+                    AgentRun.run_type == "deep_dive",
+                    AgentRun.status == "completed"
+                )
+                .order_by(AgentRun.created_at.desc())
+                .limit(1)
+            )
+            deep_dive_run = deep_dive_run_result.scalar_one_or_none()
+            
+            if deep_dive_run and deep_dive_run.result:
+                # Reconstruct report from result fields
+                res = deep_dive_run.result
+                direction = res.get("direction", direction)
+                
+                # Build a summary string for the agent
+                deep_dive_report = f"""
+                Research Direction: {direction.get('title', 'Unknown')}
+                Description: {direction.get('description', '')}
+                
+                Hypotheses: {json.dumps(res.get('hypotheses', []), indent=2)}
+                Baseline Methods: {json.dumps(res.get('baseline_methods', []), indent=2)}
+                Datasets: {json.dumps(res.get('datasets', []), indent=2)}
+                Metrics: {json.dumps(res.get('metrics', []), indent=2)}
+                Training Protocol: {json.dumps(res.get('training_protocol', {}), indent=2)}
+                """
+                
+            # Get experiment file contents
+            if experiment_data:
+                from app.models import ExperimentUpload
+                import aiofiles
+                
+                for exp_id in experiment_data:
+                    # Fetch file record
+                    exp_result = await db.execute(
+                        select(ExperimentUpload).where(ExperimentUpload.id == exp_id)
+                    )
+                    exp_record = exp_result.scalar_one_or_none()
+                    
+                    if exp_record:
+                        try:
+                            # Use regular open for reading if async fails or for simplicity
+                            with open(exp_record.file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                                content = f.read()
+                                loaded_experiment_data.append({
+                                    "name": exp_record.original_name,
+                                    "type": exp_record.file_type,
+                                    "content": content
+                                })
+                        except Exception as e:
+                            logger.error(f"[PAPER] Failed to read experiment file {exp_id}: {e}")
+            
+            logger.info(f"[PAPER] Context loaded. Report length: {len(deep_dive_report)}, Experiment files: {len(loaded_experiment_data)}")
+
+        except Exception as e:
+            logger.error(f"[PAPER] Error fetching context: {e}")
+            
+        
         initial_state = {
             "project_id": project_id,
             "direction": direction,
-            "deep_dive_report": "",  # TODO: Get from previous run
-            "experiment_data": experiment_data,
+            "deep_dive_report": deep_dive_report,
+            "experiment_data": loaded_experiment_data,
             "outline": None,
             "title": None,
             "abstract": None,
@@ -340,7 +405,7 @@ async def run_paper_agent(run_id: str, project_id: str, direction: dict, experim
             "messages": [],
         }
         
-        logger.info(f"[PAPER] Executing graph pipeline...")
+        logger.info(f"[PAPER] Executing graph pipeline with {len(loaded_experiment_data)} result files...")
         final_state = await graph.ainvoke(initial_state)
         
         if final_state.get("error"):

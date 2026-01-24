@@ -58,11 +58,8 @@ async def scope_clarifier_node(state: DiscoveryState) -> DiscoveryState:
     
     logger.info(f"[SCOPE_CLARIFIER] Processing query: {state['user_query']}")
     
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-flash-lite-latest",
-        google_api_key=settings.google_api_key,
-        temperature=0.3,
-    )
+    from app.agents.llm_factory import get_llm
+    llm = get_llm(temperature=0.3)
     
     prompt = ChatPromptTemplate.from_template(SCOPE_CLARIFIER_PROMPT)
     chain = prompt | llm
@@ -78,7 +75,13 @@ async def scope_clarifier_node(state: DiscoveryState) -> DiscoveryState:
         elif "```" in content:
             content = content.split("```")[1].split("```")[0]
         
-        result = json.loads(content.strip())
+        try:
+            result = json.loads(content.strip())
+        except json.JSONDecodeError:
+            # Fallback: maintain raw strings for regex repair
+            import re
+            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', content)
+            result = json.loads(fixed_content.strip())
         
         return {
             **state,

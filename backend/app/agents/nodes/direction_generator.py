@@ -86,11 +86,8 @@ async def direction_generator_node(state: DiscoveryState) -> DiscoveryState:
     
     logger.info(f"[DIRECTION_GENERATOR] Generating directions from {len(gaps)} gaps...")
 
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-flash-lite-latest",
-        google_api_key=settings.google_api_key,
-        temperature=0.5,
-    )
+    from app.agents.llm_factory import get_llm
+    llm = get_llm(temperature=0.5)
     
     prompt = ChatPromptTemplate.from_template(DIRECTION_GENERATOR_PROMPT)
     chain = prompt | llm
@@ -109,7 +106,14 @@ async def direction_generator_node(state: DiscoveryState) -> DiscoveryState:
         elif "```" in content:
             content = content.split("```")[1].split("```")[0]
         
-        result = json.loads(content.strip())
+        try:
+            result = json.loads(content.strip())
+        except json.JSONDecodeError:
+            # Fallback: maintain raw strings for regex repair
+            # Fix invalid escapes: \ that is not followed by " \ / b f n r t u
+            import re
+            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', content)
+            result = json.loads(fixed_content.strip())
         
         # Sort by feasibility score
         directions = result.get("directions", [])

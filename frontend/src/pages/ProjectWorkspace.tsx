@@ -16,6 +16,7 @@ import {
     Loader2,
     Download,
     ShieldAlert,
+    RefreshCw,
 } from 'lucide-react';
 import {
     projectsApi,
@@ -327,9 +328,19 @@ export function ProjectWorkspace() {
                             <h3 className="text-xl font-semibold mb-2">Analysis Failed</h3>
                             <p className="max-w-md mb-4">{latestRun.error_message || "An unexpected error occurred."}</p>
                             <button
-                                onClick={() => queryClient.invalidateQueries({ queryKey: ['runs', projectId] })}
+                                onClick={() => {
+                                    if (latestRun.run_type === 'discovery') {
+                                        runsApi.startDiscovery(projectId!, project?.title || "Research Request");
+                                    } else if (latestRun.run_type === 'deep_dive') {
+                                        // Need direction ID for deep dive retry, might need to reset state instead
+                                        queryClient.invalidateQueries({ queryKey: ['runs', projectId] });
+                                    } else if (latestRun.run_type === 'paper') {
+                                        draftPaperMutation.mutate();
+                                    }
+                                }}
                                 className="btn btn-secondary"
                             >
+                                <RefreshCw className="w-4 h-4 mr-2" />
                                 Retry
                             </button>
                         </div>

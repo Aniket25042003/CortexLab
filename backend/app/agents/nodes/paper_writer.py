@@ -10,6 +10,7 @@ from langchain.prompts import ChatPromptTemplate
 from app.config import get_settings
 from app.agents.state import PaperState
 import json
+import re
 
 settings = get_settings()
 
@@ -124,17 +125,10 @@ async def paper_writer_node(state: PaperState) -> PaperState:
     deep_dive_report = state.get("deep_dive_report", "")
     experiment_data = state.get("experiment_data", [])
     
-    llm_flash = ChatGoogleGenerativeAI(
-        model="gemini-flash-lite-latest",
-        google_api_key=settings.google_api_key,
-        temperature=0.3,
-    )
-    
-    llm_pro = ChatGoogleGenerativeAI(
-        model="gemini-flash-lite-latest",
-        google_api_key=settings.google_api_key,
-        temperature=0.4,
-    )
+    from app.agents.llm_factory import get_llm
+
+    llm_flash = get_llm(temperature=0.3)
+    llm_pro = get_llm(temperature=0.4)
     
     try:
         # Step 1: Generate paper outline
@@ -165,7 +159,12 @@ async def paper_writer_node(state: PaperState) -> PaperState:
         elif "```" in outline_content:
             outline_content = outline_content.split("```")[1].split("```")[0]
         
-        outline = json.loads(outline_content.strip())
+        try:
+            outline = json.loads(outline_content.strip())
+        except json.JSONDecodeError:
+             # Fallback: maintain raw strings for regex repair
+            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', outline_content)
+            outline = json.loads(fixed_content.strip())
         title = outline.get("title", "Research Paper Draft")
         paper_outline = outline.get("outline", {})
         

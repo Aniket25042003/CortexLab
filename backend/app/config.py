@@ -38,6 +38,12 @@ class Settings(BaseSettings):
         default="",
         description="Google API Key for Gemini"
     )
+
+    # Groq AI
+    groq_api_key: str = Field(
+        default="",
+        description="Groq API Key"
+    )
     
     # Session - auto-generated if not provided
     session_secret_key: str = Field(

@@ -28,6 +28,9 @@ Analyze the paper and provide:
 2. Specific issues to address
 3. Section-by-section recommendations
 
+RESPONDING WITH VALID JSON IS CRITICAL.
+Ensure all backslashes in your JSON strings are properly escaped (e.g., use "\\alpha" instead of "\alpha").
+
 Respond in JSON format:
 {{
     "quality_score": 7,
@@ -136,11 +139,8 @@ async def paper_editor_node(state: PaperState) -> PaperState:
             "current_step": "error",
         }
     
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-flash-lite-latest",
-        google_api_key=settings.google_api_key,
-        temperature=0.3,
-    )
+    from app.agents.llm_factory import get_llm
+    llm = get_llm(temperature=0.3)
     
     try:
         # Step 1: Analyze the paper
@@ -159,7 +159,13 @@ async def paper_editor_node(state: PaperState) -> PaperState:
         elif "```" in analysis_content:
             analysis_content = analysis_content.split("```")[1].split("```")[0]
         
-        analysis = json.loads(analysis_content.strip())
+        try:
+            analysis = json.loads(analysis_content.strip())
+        except json.JSONDecodeError:
+            # Fallback: maintain raw strings for regex repair
+            # Fix invalid escapes: \ that is not followed by " \ / b f n r t u
+            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', analysis_content)
+            analysis = json.loads(fixed_content.strip())
         
         # Step 2: Check for style adaptation request
         style_guides = ["ieee", "acl", "neurips", "icml", "cvpr", "aaai", "emnlp", "naacl", "acm"]

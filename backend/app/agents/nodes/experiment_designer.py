@@ -174,11 +174,8 @@ async def experiment_designer_node(state: DeepDiveState) -> DeepDiveState:
     failure_cases_text = json.dumps(failure_cases, indent=2) if failure_cases else "No failure cases identified yet"
     impl_notes_text = json.dumps(implementation_notes, indent=2) if implementation_notes else "No implementation notes"
     
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-flash-lite-latest",  # Using Pro for complex reasoning
-        google_api_key=settings.google_api_key,
-        temperature=0.4,
-    )
+    from app.agents.llm_factory import get_llm
+    llm = get_llm(temperature=0.4)
     
     prompt = ChatPromptTemplate.from_template(EXPERIMENT_DESIGN_PROMPT)
     chain = prompt | llm
@@ -203,7 +200,14 @@ async def experiment_designer_node(state: DeepDiveState) -> DeepDiveState:
         elif "```" in content:
             content = content.split("```")[1].split("```")[0]
         
-        result = json.loads(content.strip())
+        try:
+            result = json.loads(content.strip())
+        except json.JSONDecodeError:
+            # Fallback: maintain raw strings for regex repair
+            # Fix invalid escapes: \ that is not followed by " \ / b f n r t u
+            import re
+            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', content)
+            result = json.loads(fixed_content.strip())
         
         return {
             **state,

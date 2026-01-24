@@ -6,8 +6,8 @@ uvicorn[standard]==0.27.0
 python-multipart==0.0.6
 
 # Data Validation
-pydantic==2.5.3
-pydantic-settings==2.1.0
+pydantic>=2.5.3
+pydantic-settings>=2.1.0
 
 # Database
 sqlalchemy[asyncio]==2.0.25
@@ -16,10 +16,14 @@ aiosqlite==0.19.0
 alembic==1.13.1
 
 # AI & Agents
-langchain==0.1.4
-langgraph==0.0.20
-langchain-google-genai==0.0.6
-google-generativeai==0.3.2
+langchain==0.3.15
+langchain-community==0.3.15
+langchain-core==0.3.31
+langchain-google-genai==2.0.8
+google-generativeai==0.8.4
+langchain-groq==0.2.3
+langgraph==0.2.66
+aiofiles
 
 # Authentication
 google-auth==2.27.0

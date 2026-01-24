@@ -113,11 +113,8 @@ async def deep_dive_scout_node(state: DeepDiveState) -> DeepDiveState:
     direction_description = direction.get("description", "")
     novelty_angle = direction.get("novelty_angle", "")
     
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-flash-lite-latest",
-        google_api_key=settings.google_api_key,
-        temperature=0.3,
-    )
+    from app.agents.llm_factory import get_llm
+    llm = get_llm(temperature=0.3)
     
     try:
         # Step 1: Generate targeted search queries
@@ -136,7 +133,12 @@ async def deep_dive_scout_node(state: DeepDiveState) -> DeepDiveState:
         elif "```" in query_content:
             query_content = query_content.split("```")[1].split("```")[0]
         
-        search_queries = json.loads(query_content.strip())
+        try:
+            search_queries = json.loads(query_content.strip())
+        except json.JSONDecodeError:
+            import re
+            fixed_queries = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', query_content)
+            search_queries = json.loads(fixed_queries.strip())
         
         # Step 2: Search for papers with each query
         all_papers = []
@@ -179,7 +181,13 @@ async def deep_dive_scout_node(state: DeepDiveState) -> DeepDiveState:
         elif "```" in content:
             content = content.split("```")[1].split("```")[0]
         
-        result = json.loads(content.strip())
+        try:
+            result = json.loads(content.strip())
+        except json.JSONDecodeError:
+            # Fallback: maintain raw strings for regex repair
+            import re
+            fixed_content = re.sub(r'\\(?![/u"bfnrt\\])', r'\\\\', content)
+            result = json.loads(fixed_content.strip())
         
         return {
             **state,
