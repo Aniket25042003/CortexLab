@@ -52,18 +52,17 @@ async def start_discovery_run(
     run = AgentRun(
         project_id=project_id,
         run_type="discovery",
-        status="completed",  # Mark as completed immediately for now
+        status="pending",
         config={"query": request.query},
         started_at=datetime.utcnow(),
-        finished_at=datetime.utcnow(),
-        result={
-            "message": f"Discovery analysis for '{request.query}' - Agent execution coming soon!",
-            "note": "Full LangGraph agent execution is not yet wired up. This is a placeholder."
-        }
     )
     db.add(run)
     await db.commit()
     await db.refresh(run)
+
+    # Trigger background execution
+    from app.core.tasks import run_discovery_agent
+    asyncio.create_task(run_discovery_agent(run.id, project.id, request.query))
     
     return AgentRunResponse.model_validate(run)
 

@@ -28,53 +28,53 @@ export function Header() {
     };
 
     return (
-        <header className="border-b border-[var(--color-border)] bg-[var(--color-bg-secondary)]">
+        <header className="glass-nav">
             <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
                 {/* Logo */}
-                <Link to="/" className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl gradient-bg flex items-center justify-center">
-                        <Beaker className="w-5 h-5 text-white" />
+                <Link to="/dashboard" className="flex items-center gap-3 group">
+                    <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 text-white group-hover:scale-105 transition-transform">
+                        <Beaker className="w-5 h-5" />
                     </div>
-                    <span className="text-xl font-bold gradient-text">CortexLab</span>
+                    <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-800 to-slate-600">CortexLab</span>
                 </Link>
 
                 {/* User Menu */}
                 <div className="relative">
                     <button
                         onClick={() => setIsMenuOpen(!isMenuOpen)}
-                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                        className="flex items-center gap-3 p-1.5 pr-3 rounded-full hover:bg-white/50 border border-transparent hover:border-white/60 transition-all hover:shadow-sm"
                     >
                         {user?.avatar_url ? (
                             <img
                                 src={user.avatar_url}
                                 alt={user.name}
-                                className="w-8 h-8 rounded-full"
+                                className="w-8 h-8 rounded-full border border-white shadow-sm"
                             />
                         ) : (
-                            <div className="w-8 h-8 rounded-full gradient-bg flex items-center justify-center text-white text-sm font-medium">
+                            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white text-sm font-bold shadow-sm">
                                 {user ? getInitials(user.name) : '?'}
                             </div>
                         )}
-                        <span className="text-sm font-medium text-[var(--color-text-primary)]">
+                        <span className="text-sm font-semibold text-slate-700">
                             {user?.name || 'User'}
                         </span>
-                        <ChevronDown className="w-4 h-4 text-[var(--color-text-muted)]" />
+                        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isMenuOpen ? 'rotate-180' : ''}`} />
                     </button>
 
                     {isMenuOpen && (
                         <>
                             <div
-                                className="fixed inset-0 z-10"
+                                className="fixed inset-0 z-10 cursor-default"
                                 onClick={() => setIsMenuOpen(false)}
                             />
-                            <div className="absolute right-0 top-full mt-2 w-48 bg-[var(--color-bg-card)] border border-[var(--color-border)] rounded-lg shadow-lg z-20 py-1">
-                                <div className="px-4 py-2 border-b border-[var(--color-border)]">
-                                    <p className="text-sm font-medium">{user?.name}</p>
-                                    <p className="text-xs text-[var(--color-text-muted)]">{user?.email}</p>
+                            <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-slate-200 rounded-2xl shadow-xl shadow-slate-900/10 z-50 flex flex-col gap-1 overflow-hidden">
+                                <div className="px-3 py-2 border-b border-indigo-50 mb-1">
+                                    <p className="text-sm font-bold text-slate-800">{user?.name}</p>
+                                    <p className="text-xs text-slate-500 truncate">{user?.email}</p>
                                 </div>
                                 <button
                                     onClick={handleLogout}
-                                    className="w-full flex items-center gap-2 px-4 py-2 text-sm text-[var(--color-text-primary)] hover:bg-[var(--color-bg-tertiary)] transition-colors"
+                                    className="w-full flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                                 >
                                     <LogOut className="w-4 h-4" />
                                     Sign out

@@ -7,24 +7,7 @@ Main entry point for the CortexLab Research Agent API.
 from contextlib import asynccontextmanager
 import typing
 
-# Monkeypatch ForwardRef._evaluate to handle the missing recursive_guard argument in Python 3.12+
-# This fixes the compatibility issue between Pydantic V1 (used by LangChain) and Python 3.12
-try:
-    if hasattr(typing.ForwardRef, "_evaluate"):
-        _original_evaluate = typing.ForwardRef._evaluate
-        def _new_evaluate(self, globalns, localns, type_params=None, *, recursive_guard=None):
-            if recursive_guard is None:
-                recursive_guard = frozenset()
-            
-            # Handle Pydantic V1 call where 3rd arg (type_params) is actually the recursive_guard set
-            if isinstance(type_params, set):
-                recursive_guard = type_params
-                type_params = None
-                
-            return _original_evaluate(self, globalns, localns, type_params, recursive_guard=recursive_guard)
-        typing.ForwardRef._evaluate = _new_evaluate
-except Exception as e:
-    print(f"Warning: Failed to patch ForwardRef._evaluate: {e}")
+# Monkeypatch removed as it is incompatible with current environment
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -42,17 +25,51 @@ async def lifespan(app: FastAPI):
     """Application lifespan handler for startup and shutdown events."""
     # Startup
     settings = get_settings()
-    
+
     # Create upload directory if it doesn't exist
     os.makedirs(settings.upload_dir, exist_ok=True)
-    
+
     # Initialize database
     await init_db()
-    
+
+    # ── Stale-run cleanup ──────────────────────────────────────────────────
+    # Any run left in 'running' or 'pending' from a previously killed server
+    # process can never complete — mark them all as 'failed' immediately so
+    # the frontend doesn't poll forever.
+    try:
+        from sqlalchemy import update
+        from datetime import datetime
+        from app.core.database import AsyncSessionLocal
+        from app.models import AgentRun
+
+        async with AsyncSessionLocal() as db:
+            stale_statuses = ["running", "pending"]
+            result = await db.execute(
+                update(AgentRun)
+                .where(AgentRun.status.in_(stale_statuses))
+                .values(
+                    status="failed",
+                    error_message="Server was restarted while this run was in progress. Please start a new run.",
+                    finished_at=datetime.utcnow(),
+                )
+            )
+            affected = result.rowcount
+            if affected:
+                import logging as _logging
+                _logging.getLogger(__name__).warning(
+                    f"[STARTUP] Marked {affected} stale run(s) as failed (server was restarted)."
+                )
+            await db.commit()
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger(__name__).error(f"[STARTUP] Stale-run cleanup failed: {e}")
+    # ───────────────────────────────────────────────────────────────────────
+
     yield
-    
+
     # Shutdown
     # Add cleanup logic here if needed
+
 
 
 def create_app() -> FastAPI:

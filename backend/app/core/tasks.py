@@ -57,14 +57,14 @@ async def run_discovery_agent(run_id: str, project_id: str, query: str) -> None:
         initial_state = {
             "user_query": query,
             "project_id": project_id,
-            "domain_boundaries": None,
-            "search_queries": None,
-            "constraints": None,
-            "papers": None,
-            "themes": None,
-            "trends": None,
-            "gaps": None,
-            "directions": None,
+            "domain_boundaries": {},
+            "search_queries": [],
+            "constraints": {},
+            "papers": [],
+            "themes": [],
+            "trends": {},
+            "gaps": [],
+            "directions": [],
             "current_step": "starting",
             "error": None,
             "messages": [],
@@ -78,16 +78,16 @@ async def run_discovery_agent(run_id: str, project_id: str, query: str) -> None:
         logger.info(f"[DISCOVERY] Graph execution completed")
         logger.info(f"[DISCOVERY] Current step: {final_state.get('current_step')}")
         
-        # Check for errors
+        # Check for error in state
         if final_state.get("error"):
             logger.error(f"[DISCOVERY] Pipeline error: {final_state['error']}")
             run.status = "failed"
             run.error_message = final_state["error"]
         else:
             # Extract directions and format result
-            directions = final_state.get("directions", [])
-            gaps = final_state.get("gaps", [])
-            papers = final_state.get("papers", [])
+            directions = final_state.get("directions") or []
+            gaps = final_state.get("gaps") or []
+            papers = final_state.get("papers") or []
             
             logger.info(f"[DISCOVERY] Found {len(papers)} papers, {len(gaps)} gaps, {len(directions)} directions")
             
@@ -114,8 +114,8 @@ async def run_discovery_agent(run_id: str, project_id: str, query: str) -> None:
                 "directions": formatted_directions,
                 "papers_analyzed": len(papers),
                 "gaps_found": len(gaps),
-                "themes": final_state.get("themes", []),
-                "domain_boundaries": final_state.get("domain_boundaries"),
+                "themes": final_state.get("themes") or [],
+                "domain_boundaries": final_state.get("domain_boundaries", {}),
             }
         
         run.finished_at = datetime.utcnow()
