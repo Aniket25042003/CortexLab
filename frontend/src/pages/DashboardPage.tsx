@@ -314,11 +314,11 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
                     </div>
                 </Link>
 
-                {/* Delete button (appears on hover) */}
+                {/* Delete button (appears on hover or keyboard focus) */}
                 <button
                     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowDeleteConfirm(true); }}
-                    className="absolute top-4 right-4 p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100"
-                    title="Delete project"
+                    className="absolute top-4 right-4 p-2 rounded-xl text-slate-300 hover:text-red-500 hover:bg-red-50 transition-all opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:text-red-500 focus-visible:bg-red-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                    aria-label="Delete project"
                 >
                     <Trash2 className="w-4 h-4" />
                 </button>
