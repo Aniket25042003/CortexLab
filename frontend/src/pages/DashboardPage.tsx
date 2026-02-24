@@ -244,6 +244,7 @@ export function DashboardPage() {
 function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: string) => Promise<void> }) {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [deleteError, setDeleteError] = useState<string | null>(null);
 
     useBodyScrollLock(showDeleteConfirm);
 
@@ -251,11 +252,14 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
         e.stopPropagation();
         if (isDeleting) return;
         setIsDeleting(true);
+        setDeleteError(null);
         try {
             await onDelete(project.id);
+            setShowDeleteConfirm(false);
+        } catch (err) {
+            setDeleteError('Failed to delete project. Please try again.');
         } finally {
             setIsDeleting(false);
-            setShowDeleteConfirm(false);
         }
     };
 
@@ -342,16 +346,22 @@ function ProjectCard({ project, onDelete }: { project: Project; onDelete: (id: s
                         role="alertdialog"
                         aria-modal="true"
                         aria-labelledby={`delete-dialog-title-${project.id}`}
+                        aria-describedby={`delete-dialog-desc-${project.id}`}
                     >
                         {/* Icon */}
                         <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-100 flex items-center justify-center mb-4">
                             <Trash2 className="w-6 h-6 text-red-500" />
                         </div>
                         <h3 id={`delete-dialog-title-${project.id}`} className="text-lg font-black text-slate-900 mb-1">Delete project?</h3>
-                        <p className="text-sm text-slate-500 mb-6 leading-relaxed">
+                        <p id={`delete-dialog-desc-${project.id}`} className="text-sm text-slate-500 mb-6 leading-relaxed">
                             <span className="font-semibold text-slate-700">"{project.title}"</span> and all its artifacts
                             will be permanently deleted. This can't be undone.
                         </p>
+                        {deleteError && (
+                            <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2 mb-4" role="alert">
+                                {deleteError}
+                            </p>
+                        )}
                         <div className="flex gap-3">
                             <button
                                 autoFocus
